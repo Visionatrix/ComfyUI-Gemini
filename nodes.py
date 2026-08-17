@@ -2,10 +2,19 @@ import logging
 import os
 import random
 
-import google.generativeai as genai
+from google import genai
+from google.genai import types
 from torch import Tensor
 
 from .utils import images_to_pillow, temporary_env_var
+
+SAFETY_CATEGORIES = [
+    "HARM_CATEGORY_HATE_SPEECH",
+    "HARM_CATEGORY_HARASSMENT",
+    "HARM_CATEGORY_SEXUALLY_EXPLICIT",
+    "HARM_CATEGORY_DANGEROUS_CONTENT",
+    "HARM_CATEGORY_CIVIC_INTEGRITY",
+]
 
 
 class GeminiNode:
@@ -23,10 +32,12 @@ class GeminiNode:
                     [
                         "gemma-3-12b-it",
                         "gemma-3-27b-it",
-                        "gemini-2.0-flash-lite-001",
-                        "gemini-2.0-flash-001",
-                        "gemini-2.5-flash",
-                        "gemini-2.5-pro",
+                        "gemini-3.1-flash-lite",
+                        "gemini-3.5-flash",
+                        "gemini-3.5-flash-lite",
+                        "gemini-3.6-flash",
+                        "gemini-3.7-flash",
+                        "gemini-3.1-pro-preview",
                     ],
                 ),
             },
@@ -80,21 +91,29 @@ class GeminiNode:
         for image in [image_1, image_2, image_3]:
             if image is not None:
                 images_to_send.extend(images_to_pillow(image))
-        if "GOOGLE_API_KEY" in os.environ and not api_key:
-            genai.configure(transport="rest")
-        else:
-            genai.configure(api_key=api_key, transport="rest")
-        model = genai.GenerativeModel(model, safety_settings=safety_settings, system_instruction=system_instruction)
-        generation_config = genai.GenerationConfig(
-            response_mime_type="application/json" if response_type == "json" else "text/plain"
-        )
+        client_kwargs = {}
+        if api_key or "GOOGLE_API_KEY" not in os.environ:
+            client_kwargs["api_key"] = api_key
+        config_kwargs = {
+            "response_mime_type": "application/json" if response_type == "json" else "text/plain",
+            "safety_settings": [
+                types.SafetySetting(category=cat, threshold=safety_settings) for cat in SAFETY_CATEGORIES
+            ],
+        }
+        if system_instruction:
+            config_kwargs["system_instruction"] = system_instruction
         if temperature is not None and temperature >= 0:
-            generation_config.temperature = temperature
+            config_kwargs["temperature"] = temperature
         if num_predict is not None and num_predict > 0:
-            generation_config.max_output_tokens = num_predict
+            config_kwargs["max_output_tokens"] = num_predict
         try:
             with temporary_env_var("HTTP_PROXY", proxy), temporary_env_var("HTTPS_PROXY", proxy):
-                response = model.generate_content([prompt, *images_to_send], generation_config=generation_config)
+                client = genai.Client(**client_kwargs)
+                response = client.models.generate_content(
+                    model=model,
+                    contents=[prompt, *images_to_send],
+                    config=types.GenerateContentConfig(**config_kwargs),
+                )
             self.text_output = response.text
         except Exception:
             if error_fallback_value is None:

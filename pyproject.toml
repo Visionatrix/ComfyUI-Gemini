@@ -11,7 +11,7 @@ classifiers = [
   "Programming Language :: Python :: 3.12",
   "Programming Language :: Python :: 3.13",
 ]
-dependencies = [ "google-generativeai>=0.8.5" ]
+dependencies = [ "google-genai>=1" ]
 urls.Changelog = "https://github.com/Visionatrix/ComfyUI-Gemini/blob/main/CHANGELOG.md"
 urls.Repository = "https://github.com/Visionatrix/ComfyUI-Gemini"
 urls.Source = "https://github.com/Visionatrix/ComfyUI-Gemini"
