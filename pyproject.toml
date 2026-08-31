@@ -10,6 +10,7 @@ classifiers = [
   "Programming Language :: Python :: 3.11",
   "Programming Language :: Python :: 3.12",
   "Programming Language :: Python :: 3.13",
+  "Programming Language :: Python :: 3.14",
 ]
 dependencies = [ "google-generativeai>=0.8.5" ]
 urls.Changelog = "https://github.com/Visionatrix/ComfyUI-Gemini/blob/main/CHANGELOG.md"
