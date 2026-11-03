@@ -1,23 +1,6 @@
-import os
-from contextlib import contextmanager
-
 import numpy as np
 from PIL import Image
 from torch import Tensor
-
-
-@contextmanager
-def temporary_env_var(key: str, new_value: str | None):
-    old_value = os.environ.get(key)
-    if new_value:
-        os.environ[key] = new_value
-    try:
-        yield
-    finally:
-        if old_value is not None:
-            os.environ[key] = old_value
-        elif key in os.environ:
-            del os.environ[key]
 
 
 def images_to_pillow(images: Tensor | list[Tensor]) -> list[Image.Image]:
