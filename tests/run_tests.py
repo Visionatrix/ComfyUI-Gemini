@@ -1,5 +1,11 @@
 """End-to-end tests: real ComfyUI + new Ask_Gemini node + mock Gemini REST API."""
-import json, sys, time, urllib.request, urllib.error, uuid
+
+import json
+import sys
+import time
+import urllib.error
+import urllib.request
+import uuid
 
 BASE = "http://127.0.0.1:8188"
 LOG = sys.argv[1]
@@ -44,7 +50,10 @@ def gemini(model, **over):
     inputs.update(over)
     return {
         "seed": {"class_type": "PrimitiveInt", "inputs": {"value": int(time.time() * 1000) % 999999999}},
-        "tmpl": {"class_type": "PrimitiveStringMultiline", "inputs": {"value": "R1: my building\nRANDOM NUMBER: (SEED)"}},
+        "tmpl": {
+            "class_type": "PrimitiveStringMultiline",
+            "inputs": {"value": "R1: my building\nRANDOM NUMBER: (SEED)"},
+        },
         "prompt": {"class_type": "StringReplace", "inputs": {"string": ["tmpl", 0], "find": "(SEED)", "replace": "42"}},
         "gem": {"class_type": "Ask_Gemini", "inputs": inputs},
         "out": {"class_type": "TestTextSink", "inputs": {"text": ["gem", 0]}},
@@ -64,9 +73,19 @@ def run(graph, timeout=60):
             st = h[pid]["status"]
             if st.get("status_str") == "success" or st.get("completed"):
                 out = h[pid]["outputs"].get("out", {}).get("text", [None])[0]
-                return {"text": out, "status": st["status_str"], "requests": requests_log()[n_before:], "secs": time.time() - t0}
-            return {"text": None, "status": st["status_str"], "messages": st.get("messages"),
-                    "requests": requests_log()[n_before:], "secs": time.time() - t0}
+                return {
+                    "text": out,
+                    "status": st["status_str"],
+                    "requests": requests_log()[n_before:],
+                    "secs": time.time() - t0,
+                }
+            return {
+                "text": None,
+                "status": st["status_str"],
+                "messages": st.get("messages"),
+                "requests": requests_log()[n_before:],
+                "secs": time.time() - t0,
+            }
         time.sleep(0.3)
     return {"timeout": True}
 
@@ -83,22 +102,42 @@ def check(name, cond, detail=""):
 r = run(gemini("gemini-3.6-flash"))
 req = r["requests"][0]["body"] if r.get("requests") else {}
 check("1 prod-shaped payload returns Gemini text (thought part dropped)", r.get("text") == OK_TEXT, r)
-check("1 one request, to gemini-3.6-flash", len(r["requests"]) == 1 and "/models/gemini-3.6-flash:generateContent" in r["requests"][0]["path"], r.get("requests"))
+check(
+    "1 one request, to gemini-3.6-flash",
+    len(r["requests"]) == 1 and "/models/gemini-3.6-flash:generateContent" in r["requests"][0]["path"],
+    r.get("requests"),
+)
 check("1 uses GOOGLE_API_KEY from env", r["requests"][0]["key"] == "env-test-key")
 check("1 system instruction sent", "idea generator" in json.dumps(req.get("systemInstruction")))
-check("1 safety BLOCK_NONE on 4 categories", sorted(s["threshold"] for s in req.get("safetySettings", [])) == ["BLOCK_NONE"] * 4, req.get("safetySettings"))
+check(
+    "1 safety BLOCK_NONE on 4 categories",
+    sorted(s["threshold"] for s in req.get("safetySettings", [])) == ["BLOCK_NONE"] * 4,
+    req.get("safetySettings"),
+)
 gc = req.get("generationConfig", {})
-check("1 temperature=1, text/plain, no max tokens, no thinking config",
-      gc.get("temperature") == 1 and gc.get("responseMimeType") == "text/plain" and "maxOutputTokens" not in gc and "thinkingConfig" not in gc, gc)
+check(
+    "1 temperature=1, text/plain, no max tokens, no thinking config",
+    gc.get("temperature") == 1
+    and gc.get("responseMimeType") == "text/plain"
+    and "maxOutputTokens" not in gc
+    and "thinkingConfig" not in gc,
+    gc,
+)
 check("1 seed substituted into prompt", "RANDOM NUMBER: 42" in json.dumps(req.get("contents")))
 
 # 2. Model not in the dropdown list is accepted (this is what broke gemini-3.8-flash before)
 r = run(gemini("gemini-4-argon"))
-check("2 unlisted model accepted and called", r.get("text") == OK_TEXT and "gemini-4-argon" in r["requests"][0]["path"], r)
+check(
+    "2 unlisted model accepted and called", r.get("text") == OK_TEXT and "gemini-4-argon" in r["requests"][0]["path"], r
+)
 
 # 3. Garbage model id rejected at validation
 r = run(gemini("bad model!"))
-check("3 invalid model id rejected by validation", "rejected" in r and "Invalid Gemini model id" in json.dumps(r["rejected"]), r)
+check(
+    "3 invalid model id rejected by validation",
+    "rejected" in r and "Invalid Gemini model id" in json.dumps(r["rejected"]),
+    r,
+)
 
 # 4. Transient 503 retried once (retries default = 1)
 r = run(gemini("mock-503-once"))
@@ -129,26 +168,50 @@ r = run(g)
 check("10b linked fallback not used on success", r.get("text") == OK_TEXT, r)
 
 # 11. New inputs + per-node key + json + max tokens
-r = run(gemini("gemini-3.8-flash", api_key="node-key", thinking_level="low", num_predict=500, response_type="json", temperature=-0.05))
+r = run(
+    gemini(
+        "gemini-3.8-flash",
+        api_key="node-key",
+        thinking_level="low",
+        num_predict=500,
+        response_type="json",
+        temperature=-0.05,
+    )
+)
 req = r["requests"][0] if r.get("requests") else {}
 gc = req.get("body", {}).get("generationConfig", {})
 check("11 node api_key overrides env", req.get("key") == "node-key", req.get("key"))
-check("11 thinking level LOW (SDK sends snake_case key, same as calling the SDK directly), maxOutputTokens 500, json, temperature unset",
-      (gc.get("thinkingConfig", {}).get("thinkingLevel") or gc.get("thinkingConfig", {}).get("thinking_level")) == "LOW" and gc.get("maxOutputTokens") == 500
-      and gc.get("responseMimeType") == "application/json" and "temperature" not in gc, gc)
+check(
+    "11 thinking level LOW (SDK sends snake_case key, same as calling the SDK directly), maxOutputTokens 500, json, temperature unset",
+    (gc.get("thinkingConfig", {}).get("thinkingLevel") or gc.get("thinkingConfig", {}).get("thinking_level")) == "LOW"
+    and gc.get("maxOutputTokens") == 500
+    and gc.get("responseMimeType") == "application/json"
+    and "temperature" not in gc,
+    gc,
+)
 
 # 12. Gemma: system instruction folded into prompt
 r = run(gemini("gemma-3-27b-it"))
 body = r["requests"][0]["body"] if r.get("requests") else {}
-check("12 gemma: no systemInstruction field, folded into prompt",
-      "systemInstruction" not in body and "idea generator" in json.dumps(body.get("contents")), body)
+check(
+    "12 gemma: no systemInstruction field, folded into prompt",
+    "systemInstruction" not in body and "idea generator" in json.dumps(body.get("contents")),
+    body,
+)
 
 # 13. Image input
 g = gemini("gemini-3.8-flash", image_1=["img", 0])
 g["img"] = {"class_type": "EmptyImage", "inputs": {"width": 64, "height": 64, "batch_size": 1, "color": 0}}
 r = run(g)
 body = r["requests"][0]["body"] if r.get("requests") else {}
-check("13 image sent as inline PNG", ('"mimeType": "image/png"' in json.dumps(body.get("contents")) or '"mime_type": "image/png"' in json.dumps(body.get("contents"))), json.dumps(body)[:300])
+check(
+    "13 image sent as inline PNG",
+    (
+        '"mimeType": "image/png"' in json.dumps(body.get("contents"))
+        or '"mime_type": "image/png"' in json.dumps(body.get("contents"))
+    ),
+    json.dumps(body)[:300],
+)
 
 passed = sum(ok for _, ok in results)
 print(f"\n{passed}/{len(results)} passed")
