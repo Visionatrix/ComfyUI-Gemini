@@ -1,74 +1,58 @@
-# ComfyUI-Gemini
+# ComfyUI-Gemini 2.0 (google-genai)
 
-These nodes integrate the Gemini API into ComfyUI, allowing you to send prompts and images to Gemini AI models.
+`Ask_Gemini` for ComfyUI, rebuilt on Google's current Gen AI SDK (`google-genai`).
+It replaces the Visionatrix ComfyUI-Gemini 1.x node, which uses the legacy
+`google-generativeai` SDK that Google stopped supporting on 30 Nov 2025.
 
-## Features
+**Drop-in:** same node id, input names and output. GEM, Prompt the Future and any other
+workflow using `Ask_Gemini` runs without edits.
 
-- **Error Fallback Value**: Specify a fallback value to use if there's an error accessing the Gemini API.
-- **Response Type Selection**: Choose between receiving responses in plain `text` or `json` format.
-- **Image Support**: Include up to three images(or **batches**) with your prompt to provide visual context.
-- **Custom System Instructions**: Set a system instruction to guide the AI's responses.
-- **Adjustable Safety Settings**: Control the content filtering level to block inappropriate content.
+## What changes for us
 
-## Setting Up the Gemini API Key
+- **Any model id works.** Put `gemini-3.8-flash` (or whatever Google ships next) in the
+  workflow's `model` field and ComfyUI accepts it. The old node rejected anything not in
+  its hard-coded list.
+- **Empty/blocked replies use the fallback** instead of passing an empty string on.
+- New optional inputs: `thinking_level`, `timeout_seconds` (60), `retries` (1, on
+  408/429/5xx).
+- Failures are logged at WARNING with the reason.
 
-1. **Obtain API Key**:
-   - Sign up for access to the Gemini API through Google Cloud Platform.
-   - Create a new API key with permissions to access the Gemini models.
-2. **Set the API Key**:
-   - **Option 1**: Set it in your environment variables:
-     - On Windows:
-       ```cmd
-       set GOOGLE_API_KEY=your_api_key_here
-       ```
-     - On Linux/macOS:
-       ```bash
-       export GOOGLE_API_KEY=your_api_key_here
-       ```
-   - **Option 2**: Provide it directly in the node's `api_key` input.
+Full list in CHANGELOG.md.
 
-## Inputs Explained
+## Install on a GPU server
 
-- **prompt (STRING)**:
-  - Your main question or instruction for the AI.
-  - Example: "What are the health benefits of green tea?"
-- **safety_settings (CHOICE)**:
-  - Controls the filtering of the response content.
-  - Options:
-    - `BLOCK_NONE`: No filtering.
-    - `BLOCK_ONLY_HIGH`: Blocks only high-risk content.
-    - `BLOCK_MEDIUM_AND_ABOVE`: Blocks medium and high-risk content.
-- **response_type (CHOICE)**:
-  - Determines the format of the AI's response.
-  - Options:
-    - `text`: Plain text response.
-    - `json`: Response in JSON format.
-- **model (CHOICE)**:
-  - Selects the Gemini model to use.
-  - Options:
-    - `gemma-3-12b-it`: Very small model that you can run locally or remotely on the Google infrastructure.
-    - `gemma-3-27b-it`: Medium size model that you can run locally or remotely on the Google infrastructure.
-    - `gemini-2.0-flash-lite-001`: Old version of the **very** fast and free model.
-    - `gemini-2.0-flash-001`: Old version of the fast and free model.
-    - `gemini-2.5-flash`: Latest stable version of the fast and free model.
-    - `gemini-2.5-pro`: Latest stable **Pro** model with advanced capabilities.
-- **api_key (STRING, Optional)**:
-  - Your Gemini API key.
-  - Recommended to set via environment variable.
-- **proxy (STRING, Optional)**:
-  - Proxy server URL if you need to route requests through a proxy. See: [Why use Proxy?](https://visionatrix.github.io/VixFlowsDocs/AdminManual/Installation/proxy_gemini/#why-use-a-proxy)
-- **image_1, image_2, image_3 (IMAGE, Optional)**:
-  - Images or image batches to include with your prompt.
-  - Useful for tasks like image captioning or visual question answering.
-- **system_instruction (STRING, Optional)**:
-  - Sets a system-level instruction to influence the AI's behavior.
-  - Example: "You are a helpful assistant that provides concise answers."
-- **error_fallback_value (STRING, Optional, Lazy Input)**:
-  - Value to return if an error occurs when accessing Gemini.
-  - If not set, the node will raise an exception on error.
-- **temperature (FLOAT, Optional, Lazy Input)**:
-  - Controls the randomness of the output. Any **negative value** means to use default value for model.
-- **num_predict (INT, Optional, Lazy Input)**:
-  - The maximum number of tokens to include in a candidate, value `0` means to use default value for model.
+```bash
+unzip ComfyUI-Gemini-2.0.0.zip && cd ComfyUI-Gemini
+./install.sh /path/to/ComfyUI /path/to/comfyui/venv/bin/python
+# restart ComfyUI, then:
+python3 tools/smoke_test.py http://127.0.0.1:8188 gemini-3.8-flash
+```
 
-![Race and Gender Detection](https://raw.githubusercontent.com/Visionatrix/ComfyUI-Gemini/main/screenshots/race_gender.jpg)
+The installer backs up the current node to `ComfyUI/custom_nodes_backup/`, shows what pip
+would change, asks before installing, then copies the new node in.
+
+Rollback: `./install.sh --rollback /path/to/ComfyUI` and restart ComfyUI.
+
+The API key comes from `GOOGLE_API_KEY` (or `GEMINI_API_KEY`) in the ComfyUI environment
+when the node's `api_key` is empty, same as before.
+
+## Inputs
+
+| Input | Notes |
+|---|---|
+| prompt | User message. |
+| model | Dropdown shortlist, but any Gemini/Gemma id is accepted. |
+| safety_settings | One threshold for harassment, hate, sexual and dangerous content. |
+| response_type | `text` or `json` (sets the response MIME type). |
+| api_key, proxy | Empty = environment key / no proxy. |
+| image_1..3 | Optional images sent with the prompt. |
+| system_instruction | Folded into the prompt for Gemma models. |
+| error_fallback_value | Returned if Gemini fails. Empty string = fail the job. A linked input is only evaluated on failure. |
+| seed | Forces a re-run; not sent to Gemini. |
+| temperature | -0.05 = model default. |
+| num_predict | Max output tokens; 0 = model default. Includes thinking tokens on thinking models. |
+| thinking_level | `model default`, `minimal`, `low`, `medium`, `high`. Gemini 3.x only; gemini-3.8-flash has no `minimal`. Gemini 2.5 models error on this (they use thinking budgets), so leave it on `model default` for them. |
+| timeout_seconds | Per request; 0 = no timeout. |
+| retries | Extra attempts on 408/429/500/502/503/504. |
+
+Based on Visionatrix/ComfyUI-Gemini (MIT).

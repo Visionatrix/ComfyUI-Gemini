@@ -1,7 +1,7 @@
 [project]
-name = "comfyui-gemini"
-version = "1.1.2"
-description = "Nodes for Google Gemini API, focusing on backward compatibility and stability within ComfyUI."
+name = "comfyui-gemini-genai"
+version = "2.0.0"
+description = "Ask_Gemini node for the Google Gemini API on the google-genai SDK; drop-in replacement for Visionatrix ComfyUI-Gemini 1.x."
 license = { file = "LICENSE" }
 requires-python = ">=3.10"
 classifiers = [
@@ -11,7 +11,7 @@ classifiers = [
   "Programming Language :: Python :: 3.12",
   "Programming Language :: Python :: 3.13",
 ]
-dependencies = [ "google-generativeai>=0.8.5" ]
+dependencies = [ "google-genai>=1.51" ]
 urls.Changelog = "https://github.com/Visionatrix/ComfyUI-Gemini/blob/main/CHANGELOG.md"
 urls.Repository = "https://github.com/Visionatrix/ComfyUI-Gemini"
 urls.Source = "https://github.com/Visionatrix/ComfyUI-Gemini"
@@ -50,8 +50,3 @@ lint.mccabe.max-complexity = 20
 
 [tool.isort]
 profile = "black"
-
-[tool.comfy]
-PublisherId = "visionatrix"
-DisplayName = "ComfyUI-Gemini"
-Icon = "https://raw.githubusercontent.com/Visionatrix/VixFlowsDocs/main/screenshots/logo_org_800x800.png"
